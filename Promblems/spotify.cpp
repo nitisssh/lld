@@ -310,26 +310,31 @@ public:
 
         notifyObservers(PlaybackEvent::START, user_id, song->getId());
     }
-};
 
-// ============================================================================
-// 6.5 SONG SEARCH SERVICE (HNSW API INNER CALLS)
-// ============================================================================
-class SongSearchService {
-private:
-    const ISongRepository* songRepo;
-public:
-    SongSearchService(const ISongRepository* repo) : songRepo(repo) {
-        // Initialize the HNSW search engine
-        HNSWEngine::Initialize("../SearchEngine", 3072, 4, 16);
-    }
-
-    void searchByRandomVector(int songId) {
-        const Song* source_song = songRepo->findById(songId);
-        if (!source_song) {
-            cout << "[SEARCH SERVICE ERROR] Song ID " << songId << " does not exist in repository.\n";
+    void playSong(int user_id, int song_id) {
+        const Song* song = songRepo->findById(song_id);
+        if (!song) {
+            cout << "[PLAYER ERROR] Song ID " << song_id << " not found.\n";
             return;
         }
+
+        activeQueue->loadTracks({song_id}, false);
+
+        string execution_url = packager->buildMasterManifestUrl(*song);
+        cout << "[ENGINE] Mounting media stream source -> " << execution_url << "\n";
+
+        notifyObservers(PlaybackEvent::START, user_id, song->getId());
+    }
+
+    void searchAndPlayRandom(int user_id, int song_id) {
+        const Song* source_song = songRepo->findById(song_id);
+        if (!source_song) {
+            cout << "[PLAYER ERROR] Song ID " << song_id << " not found in repository.\n";
+            return;
+        }
+
+        // Initialize search engine pointing to the SearchEngine directory
+        HNSWEngine::Initialize("../SearchEngine", 3072, 4, 16);
 
         // Generate a random vector of 3072 dimensions
         vector<float> random_query(3072);
@@ -340,16 +345,25 @@ public:
             random_query[i] = dist(rng);
         }
 
-        cout << "[SEARCH SERVICE] User requested search for Song ID " << songId 
-             << " ('" << source_song->getName() << "') using a random query vector...\n";
+        cout << "[PLAYBACK SERVICE] Searching closest song to Song ID " << song_id 
+             << " ('" << source_song->getName() << "') via HNSW random vector query...\n";
 
-        // Query HNSWEngine
+        // Query the HNSW Engine
         vector<string> results = HNSWEngine::Search(random_query, 5, 32);
+        if (results.empty()) {
+            cout << "[PLAYBACK SERVICE] No songs found in search engine database.\n";
+            return;
+        }
 
-        cout << "[SEARCH SERVICE] Top nearest songs found in the database:\n";
+        cout << "[PLAYBACK SERVICE] Top nearest songs found in search engine:\n";
         for (size_t i = 0; i < results.size(); ++i) {
             cout << "  Match #" << i + 1 << ": " << results[i] << "\n";
         }
+
+        // Play the top result as a single track (mocking its ID as 999)
+        string matched_song = results[0];
+        cout << "[ENGINE] Mounting media stream source for search match -> manifest_search_999\n";
+        notifyObservers(PlaybackEvent::START, user_id, 999);
     }
 };
 
@@ -395,11 +409,13 @@ int main() {
     cout << "--- Initializing User Playlist Playback Stream ---\n";
     playbackService->playPlaylist(501, 10);
 
-    // 8. Initialize and test Search Service
-    cout << "\n--- Initializing Song Search Service ---\n";
-    SongSearchService* searchService = new SongSearchService(songRepo);
-    searchService->searchByRandomVector(1); // Test random vector query for Song ID 1
-    delete searchService;
+    // 7.5. Play single song
+    cout << "\n--- Playing Single Song Track ---\n";
+    playbackService->playSong(501, 1); // Play Song ID 1 (Blackened)
+
+    // 8. Initialize and test Search Service via Playback Service
+    cout << "\n--- Testing Search via Playback Service ---\n";
+    playbackService->searchAndPlayRandom(501, 1); // Query and play song for Song ID 1
 
     // ========================================================================
     // MANUAL CLEANUP (Deterministic destruction to avoid any leaks)
