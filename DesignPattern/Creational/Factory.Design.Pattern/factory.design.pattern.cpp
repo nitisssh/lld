@@ -48,7 +48,7 @@ class NotificationService {
     // but we can return a pointer and all
     // this happens because to be able to return Notifier , compiler must need to create the object first 
     // but it is not possible since it is abstract , so we cant return abstract class Notifier
-    virtual Notifier * makeNotifier() = 0 ; 
+    virtual Notifier * makeNotifier() = 0 ;  // creating a notifies
 
     virtual void specify () = 0 ;
 };
