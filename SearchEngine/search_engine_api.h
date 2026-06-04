@@ -1,4 +1,39 @@
 #pragma once
+
+/*
+ * ============================================================================
+ * HEADER-ONLY SEARCH ENGINE ARCHITECTURE UNDER THE HOOD
+ * ============================================================================
+ * Why is this setup header-only? How does it fix the "undefined reference" issue?
+ * 
+ * 1. The Old Way: Promise vs. Delivery
+ *    Normally in C++, code is split into two parts:
+ *    - Header file (.h): The "promise" telling the compiler that a function exists.
+ *    - Source file (.cpp): The "delivery" containing the actual function code.
+ *    If you only compile `Spotify.cpp` with `g++ Spotify.cpp`, the compiler accepts 
+ *    the promises, but the Linker throws an "undefined reference" error because
+ *    nobody compiled `search_engine_api.cpp` to deliver the actual code.
+ * 
+ * 2. The New Way: Header-Only
+ *    We refactored the search engine into a header-only library by moving all the 
+ *    definitions (implementations) from the .cpp files directly into the .h files.
+ *    Now, when you #include "search_engine_api.h", the preprocessor copies the entire 
+ *    implementation code straight into your file before compiling. This allows a 
+ *    single compilation command (e.g., `g++ Spotify.cpp`) to build everything.
+ * 
+ * 3. The Magic Keywords
+ *    A. The 'inline' keyword (for functions):
+ *       Tells the compiler that if multiple files include this header, it's 
+ *       fine to compile the functions multiple times—just merge them into one
+ *       definition during linking to avoid "multiple definition" errors.
+ *    B. C++17 'inline' variables (for global state):
+ *       Our search engine has global variables (like `global_index` for the graph).
+ *       Without `inline`, every file including this header would get a separate copy
+ *       of the variables in memory. Using `inline` guarantees that they all share
+ *       the exact same single instance in memory across the entire program.
+ * ============================================================================
+ */
+
 #include <bits/stdc++.h>
 #include "hnsw.h"
 #include "embedding_store.h"
