@@ -74,6 +74,75 @@ namespace HNSWEngine {
         return true;
     }
 
+    // 1.5. Initialize engine from legacy raw binary embeddings and a mapping text file.
+    // Consolidates them, removes duplicates to build a unique database, saves it to output_db_path,
+    // and then initializes the engine using that database file.
+    inline bool InitializeFromLegacy(const string& bin_path, const string& mapping_path, const string& output_db_path, int dimensions=768, int M = 16, int ef_construction = 64, float duplicate_epsilon = 1e-6f) {
+        cout << "[API] Migrating legacy files: " << bin_path << " and " << mapping_path << " to " << output_db_path << endl;
+
+        // Load textual mappings
+        vector<string> labels;
+        ifstream map_file(mapping_path);
+        if (!map_file) {
+            cerr << "[API ERROR] Missing mapping file: " << mapping_path << endl;
+            return false;
+        }
+        string line;
+        while (getline(map_file, line)) {
+            if (!line.empty()) {
+                labels.push_back(line);
+            }
+        }
+
+        // Load legacy raw binary embeddings
+        ifstream bin_file(bin_path, ios::binary);
+        if (!bin_file) {
+            cerr << "[API ERROR] Missing binary embeddings file: " << bin_path << endl;
+            return false;
+        }
+
+        vector<vector<float>> database_vectors;
+        vector<float> vec(dimensions);
+        int count = 0;
+        while (bin_file.read(reinterpret_cast<char*>(vec.data()), dimensions * sizeof(float))) {
+            database_vectors.push_back(vec);
+            count++;
+        }
+
+        int min_size = min(count, static_cast<int>(labels.size()));
+
+        // Deduplicate and pair them in memory
+        vector<EmbeddingRecord> unique_records;
+        int duplicate_count = 0;
+        for (int i = 0; i < min_size; ++i) {
+            bool dup = false;
+            for (const auto& existing : unique_records) {
+                if (is_duplicate_vector(existing.vec, database_vectors[i], duplicate_epsilon)) {
+                    dup = true;
+                    break;
+                }
+            }
+
+            if (!dup) {
+                unique_records.push_back({labels[i], database_vectors[i]});
+            } else {
+                duplicate_count++;
+            }
+        }
+
+        cout << "[API] Loaded " << count << " raw embeddings and " << labels.size() << " labels." << endl;
+        cout << "[API] Deduplicated " << duplicate_count << " vectors. " << unique_records.size() << " unique records remaining." << endl;
+
+        // Save to consolidated DB file
+        if (!save_database(output_db_path, dimensions, unique_records)) {
+            cerr << "[API ERROR] Failed to save consolidated database to: " << output_db_path << endl;
+            return false;
+        }
+
+        // Initialize using the newly created DB file
+        return Initialize(output_db_path, dimensions, M, ef_construction);
+    }
+
     // 2. Insert a new embedding vector (checking for duplicates). Writes to DB and active graph.
     // Returns true on success, false if duplicate or write failure.
     inline bool Insert(const string& label, const vector<float>& vec, float duplicate_epsilon = 1e-6f) {
