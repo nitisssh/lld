@@ -6,7 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <cmath>
-
+using namespace std;
 // Struct to represent a single database entry.
 // Combines a textual identifier with its high-dimensional float vector.
 struct EmbeddingRecord {
@@ -23,6 +23,9 @@ inline bool is_duplicate_vector(const std::vector<float>& v1, const std::vector<
         dist_sq += diff * diff;
     }
     float dist = std::sqrt(dist_sq);
+    if ( dist < epsilon ) {
+        cout << "YES DUPLICATE VECTOR ADDITION" << endl ;
+    }
     return dist < epsilon;
 }
 
